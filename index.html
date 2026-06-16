@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estande de Tiro Pro</title>
+    <style>
+        body {
+            margin: 0;
+            background: radial-gradient(circle, #1a1c29, #0e1017);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            text-align: center;
+            overflow: hidden;
+        }
+        .hud {
+            display: flex;
+            justify-content: space-around;
+            max-width: 800px;
+            margin: 20px auto 0 auto;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        canvas {
+            background-color: #151821;
+            display: block;
+            margin: 15px auto;
+            border: 3px solid #3a3f58;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            cursor: crosshair;
+        }
+        .dica {
+            color: #8a8f98;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body onload="iniciarJogo()">
+
+    <h1>Estande de Tiro: Advanced</h1>
+    <div class="hud">
+        <div>Pontos: <span id="pontos" style="color: #2ecc71;">0</span></div>
+        <div>Munição: <span id="municao" style="color: #f1c40f;">6/6</span></div>
+        <div>Tempo: <span id="tempo" style="color: #e74c3c;">30</span>s</div>
+    </div>
+    <canvas id="canvasJogo" width="800" height="450"></canvas>
+    <p class="dica">Clique para Atirar | Pressione <strong>R</strong> para Recarregar</p>
+
+    <script>
+        const canvas = document.getElementById('canvasJogo');
+        const ctx = canvas.getContext('2d');
+        
+        // Elementos do HUD
+        const txtPontos = document.getElementById('pontos');
+        const txtMunicao = document.getElementById('municao');
+        const txtTempo = document.getElementById('tempo');
+
+        // Estado do Jogo
+        let pontuacao = 0;
+        let municaoMaxima = 6;
+        let municaoAtual = 6;
+        let tempoRestante = 30;
+        let jogoAtivo = true;
+        let mouseX = 0;
+        let shakeTempo = 0;
+
+        // Entidades
+        let alvos = [];
+        let balas = [];
+        let particulas = [];
+
+        // Configurações de alvos (Cores baseadas na velocidade/pontos)
+        const tiposAlvos = [
+            { raio: 25, velX: 2, cor: '#e74c3c', pontos: 10 },  // Vermelho - Lento
+            { raio: 18, velX: 4, cor: '#3498db', pontos: 25 },  // Azul - Médio
+            { raio: 12, velX: 6, cor: '#9b59b6', pontos: 50 }   // Roxo - Rápido
+        ];
+
+        function criarAlvo() {
+            if (!jogoAtivo) return;
+            const tipo = tiposAlvos[Math.floor(Math.random() * tiposAlvos.length)];
+            alvos.push({
+                x: Math.random() > 0.5 ? 0 : canvas.width,
+                y: Math.random() * (canvas.height - 200) + 50,
+                raio: tipo.raio,
+                velX: Math.random() > 0.5 ? tipo.velX : -tipo.velX,
+                cor: tipo.cor,
+                pontos: tipo.pontos
+            });
+        }
+
+        function criarExplosao(x, y, cor) {
+            for (let i = 0; i < 12; i++) {
+                particulas.push({
+                    x: x,
+                    y: y,
+                    velX: (Math.random() - 0.5) * 6,
+                    velY: (Math.random() - 0.5) * 6,
+                    raio: Math.random() * 3 + 1,
+                    vida: 30,
+                    cor: cor
+                });
+            }
+        }
+
+        function iniciarJogo() {
+            // Rastrear mouse
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                mouseX = e.clientX - rect.left;
+            });
+
+            // Evento de tiro
+            canvas.addEventListener('mousedown', () => {
+                if (!jogoAtivo) return;
+                
+                if (municaoAtual > 0) {
+                    municaoAtual--;
+                    shakeTempo = 5; // Ativa tremor de tela
+                    txtMunicao.innerText = `${municaoAtual}/${municaoMaxima}`;
+                    
+                    balas.push({
+                        x: mouseX,
+                        y: canvas.height - 40,
+                        velY: -14,
+                        raio: 4
+                    });
+                } else {
+                    txtMunicao.innerText = "SEM BALA! (R)";
+                }
+            });
+
+            // Evento de recarga
+            window.addEventListener('keydown', (e) => {
+                if (e.key.toLowerCase() === 'r' && municaoAtual < municaoMaxima && jogoAtivo) {
+                    municaoAtual = municaoMaxima;
+                    txtMunicao.innerText = `${municaoAtual}/${municaoMaxima}`;
+                }
+            });
+
+            // Geradores automáticos
+            setInterval(criarAlvo, 1200);
+            
+            // Contador de tempo
+            const contagemRegressiva = setInterval(() => {
+                if (tempoRestante > 0) {
+                    tempoRestante--;
+                    txtTempo.innerText = tempoRestante;
+                } else {
+                    jogoAtivo = false;
+                    clearInterval(contagemRegressiva);
+                }
+            }, 1000);
+
+            // Criar alvos iniciais
+            for(let i=0; i<3; i++) criarAlvo();
+
+            atualizar();
+        }
+
+        function atualizar() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Sistema de Tremor de Tela (Screen Shake)
+            ctx.save();
+            if (shakeTempo > 0) {
+                let dx = (Math.random() - 0.5) * 8;
+                let dy = (Math.random() - 0.5) * 8;
+                ctx.translate(dx, dy);
+                shakeTempo--;
+            }
+
+            if (jogoAtivo) {
+                // 1. Atualizar e Desenhar Balas
+                for (let i = balas.length - 1; i >= 0; i--) {
+                    let b = balas[i];
+                    b.y += b.velY;
+
+                    ctx.beginPath();
+                    ctx.arc(b.x, b.y, b.raio, 0, Math.PI * 2);
+                    ctx.fillStyle = '#f1c40f';
+                    ctx.fill();
+                    ctx.closePath();
+
+                    if (b.y < 0) balas.splice(i, 1);
+                }
+
+                // 2. Atualizar e Desenhar Alvos
+                for (let i = alvos.length - 1; i >= 0; i--) {
+                    let a = alvos[i];
+                    a.x += a.velX;
+
+                    // Rebate nas bordas laterais
+                    if (a.x - a.raio < 0 || a.x + a.raio > canvas.width) {
+                        a.velX = -a.velX;
+                    }
+
+                    // Desenha o alvo com uma borda interna (estilo alvo real)
+                    ctx.beginPath();
+                    ctx.arc(a.x, a.y, a.raio, 0, Math.PI * 2);
+                    ctx.fillStyle = a.cor;
+                    ctx.fill();
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#fff';
+                    ctx.stroke();
+                    ctx.closePath();
+
+                    // Detectar colisão com alguma bala
+                    for (let j = balas.length - 1; j >= 0; j--) {
+                        let b = balas[j];
+                        let dist = Math.hypot(b.x - a.x, b.y - a.y);
+
+                        if (dist < b.raio + a.raio) {
+                            pontuacao += a.pontos;
+                            txtPontos.innerText = pontuacao;
+                            criarExplosao(a.x, a.y, a.cor);
+                            alvos.splice(i, 1);
+                            balas.splice(j, 1);
+                            break;
+                        }
+                    }
+                }
+
+                // 3. Partículas de Explosão
+                for (let i = particulas.length - 1; i >= 0; i--) {
+                    let p = particulas[i];
+                    p.x += p.velX;
+                    p.y += p.velY;
+                    p.vida--;
+
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.raio, 0, Math.PI * 2);
+                    ctx.fillStyle = p.cor;
+                    ctx.globalAlpha = p.vida / 30;
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+
+                    if (p.vida <= 0) particulas.splice(i, 1);
+                }
+
+                // 4. Desenhar a Arma Base
+                ctx.beginPath();
+                ctx.arc(mouseX, canvas.height, 25, Math.PI, 0);
+                ctx.fillStyle = '#34495e';
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#7f8c8d';
+                ctx.stroke();
+                ctx.closePath();
+
+                // Cano da Arma seguindo a linha reta vertical
+                ctx.fillStyle = '#2c3e50';
+                ctx.fillRect(mouseX - 6, canvas.height - 45, 12, 25);
+
+            } else {
+                // Tela de Fim de Jogo
+                ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.font = "bold 40px sans-serif";
+                ctx.fillStyle = "#e74c3c";
+                ctx.textAlign = "center";
+                ctx.fillText("FIM DE JOGO", canvas.width / 2, canvas.height / 2 - 20);
+
+                ctx.font = "20px sans-serif";
+                ctx.fillStyle = "#fff";
+                ctx.fillText(`Pontuação Final: ${pontuacao} pontos`, canvas.width / 2, canvas.height / 2 + 20);
+                ctx.font = "14px sans-serif";
+                ctx.fillStyle = "#8a8f98";
+                ctx.fillText("Atualize a página para jogar novamente", canvas.width / 2, canvas.height / 2 + 60);
+            }
+
+            ctx.restore();
+            requestAnimationFrame(atualizar);
+        }
+    </script>
